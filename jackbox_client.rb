@@ -1,91 +1,92 @@
 class JackboxClient
   attr_reader :room_info, :user_id, :ws_url, :ws, :room_state, :customer_state
 
-  PING = "2::"
-  EVENT = "5::"
+  CONNECT = 0
+  JOIN = 1
+  PING = 2
+  EVENT = 5
   EVENT_MESSAGE = "Event"
+  ROOM_BLOB_CHANGED = "RoomBlobChanged"
+  CUSTOMER_BLOB_CHANGED = "CustomerBlobChanged"
+  ROOM_DESTROYED = "RoomDestroyed"
 
   def initialize(room_info, user_id, ws_url)
     @room_info = room_info
     @user_id = user_id
     @ws_url = ws_url
-    @room_state = RoomState.new
-    @customer_state = CustomerState.new
+    @room_blob = ""
+    @customer_blob = ""
   end
 
   def run!
     @ws = Faye::WebSocket::Client.new(ws_url)
     ws.on :message do |event|
-      on_message(event)
+      next unless event.data =~ /^\d+/
+      code, body = event.data.scan(/^(\d+):{2,3}(.*)$/).first
+      code = code.to_i
+      on_message(code, body)
     end
     ws.on :close do |event|
       @ws = nil
     end
   end
 
-  def emit_event(event)
-    ws.send("5:::#{event}")
-  end
-
   protected
 
   def join_room
-    join = {
-      name: "msg",
-      args: [{
-        "roomId" => room_info.room_id,
-        "name" => "RANDO", # FIXME: allow this to be configurable
-        "appId" => room_info.appid,
-        "joinType" => room_info.join_as,
-        "type" => "Action",
-        "userId" => user_id,
-        "action" => "JoinRoom"
-      }]
-    }.to_json
-    emit_event(join)
+    send(create_action_packet("JoinRoom",
+                              name: "RANDO",
+                              "joinType" => room_info.join_as))
   end
 
-  def on_message(event)
-    puts "Received message: #{event.data}"
-    case event.data[0,3]
-    when "1::"
-      join_room
+  def on_message(code, body)
+    case code
     when PING
-      pong
+      puts "Got ping"
+      send_pong
+    when JOIN
+      join_room
     when EVENT
-      message_args = JSON.parse(event.data[4..-1])["args"]
-      on_jackbox_message(message_args) 
-      process_state
+      args = JSON.parse(body)["args"]
+      args.each { |arg| on_data_received(arg) }
     end
   end
 
-  def process_state
-    if customer_state.category_selection? && customer_state.choosing?
-      # pick a random choice from the list
-      category = room_state.pick_random_category
-      choose_category(category)
-    end
+  def send(packet)
+    msg = {
+      name: "msg",
+      args: [packet]
+    }.to_json
+    puts "Sending #{msg}"
+    ws.send("5:::#{msg}")
+  end
+
+  def create_action_packet(action, data)
+    {
+      "type" => "Action",
+      "appId" => room_info.appid,
+      "userId" => user_id,
+      "roomId" => room_info.room_id,
+      "action" => action
+    }.merge(data)
   end
 
   private
 
-  def pong
-    ws.send(PING)
+  def on_data_received(data)
+    puts "on_data_received: #{data}"
+    on_event_received(data) if data["type"] == EVENT_MESSAGE
   end
 
-  def choose_category(category)
-    # 5:::{"name":"msg","args":[{"roomId":"VNFU","userId":"c29d7669-cff5-459b-ab15-c0a91e4433d7","message":{"chosenCategory":4},"type":"Action","appId":"3Mcei9GjIFpBUGwhQRtHRyGQpQUYoJfy","action":"SendMessageToRoomOwner"}]}
-    event = {
-      name: "msg",
-      args: [{
-        "roomId" => room_info.room_id,
-        "userId" => user_id,
-        "message" => { "chosenCategory" => category },
-        "type" => "Action",
-        "appId" => room_info.appid,
-        "action" => "SendMessageToRoomOwner"
-      }]
-    }.to_json
-    emit_event(event)
+  def on_event_received(data)
+    event = data["event"]
+    on_customer_blob_changed(data["blob"]) if event == CUSTOMER_BLOB_CHANGED
+    on_room_blob_changed(data["blob"]) if event == ROOM_BLOB_CHANGED
+    EventMachine::stop_event_loop if event == ROOM_DESTROYED
+  end
+
+  def send_pong
+    puts "Sending pong"
+    ws.send("2::")
   end
 end

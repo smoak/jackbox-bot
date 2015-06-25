@@ -3,8 +3,6 @@ require 'securerandom'
 require_relative 'room_info'
 require_relative 'jackbox_client'
 require_relative 'fibbage_client'
-require_relative 'customer_state'
-require_relative 'room_state'
 require 'bundler'
 Bundler.require
 
