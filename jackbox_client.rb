@@ -9,6 +9,9 @@ class JackboxClient
   ROOM_BLOB_CHANGED = "RoomBlobChanged"
   CUSTOMER_BLOB_CHANGED = "CustomerBlobChanged"
   ROOM_DESTROYED = "RoomDestroyed"
+  SEND_MESSAGE_TO_ROOM_OWNER = "SendMessageToRoomOwner"
+  RESULT_MESSAGE = "Result"
+  JOIN_ROOM = "JoinRoom"
 
   def initialize(room_info, user_id, ws_url)
     @room_info = room_info
@@ -76,6 +79,7 @@ class JackboxClient
   def on_data_received(data)
     puts "on_data_received: #{data}"
     on_event_received(data) if data["type"] == EVENT_MESSAGE
+    on_result_received(data) if data["type"] == RESULT_MESSAGE
   end
 
   def on_event_received(data)
@@ -83,6 +87,23 @@ class JackboxClient
     on_customer_blob_changed(data["blob"]) if event == CUSTOMER_BLOB_CHANGED
     on_room_blob_changed(data["blob"]) if event == ROOM_BLOB_CHANGED
     EventMachine::stop_event_loop if event == ROOM_DESTROYED
+  end
+
+  def on_result_received(data)
+    puts "on_result_received: #{data}"
+    action = data["action"]
+    on_joined if action == JOIN_ROOM && data["success"] && data["initial"]
+  end
+
+  def on_customer_blob_changed(blob)
+    @customer_blob = blob
+  end
+
+  def on_room_blob_changed(blob)
+    @room_blob = blob
+  end
+
+  def on_joined
   end
 
   def send_pong
