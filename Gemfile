@@ -1,6 +1,6 @@
 source 'https://rubygems.org' do
   gem 'httparty', '~> 0.13'
-  gem 'faye-websocket', '~> 0.9'
+  gem 'faye-websocket', '~> 0.11'
 
   group :development do
     gem 'byebug', '~> 5.0'
