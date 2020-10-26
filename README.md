@@ -1,3 +1,12 @@
+## Prerequisites 
+
+* Ruby 2.6+
+* Bundler 2+
+
+## Setup
+
+`bundle install`
+
 ## Usage
 
 ```bash
